@@ -1,0 +1,45 @@
+{
+  "name": "markdown-copy-helper",
+  "displayName": "Markdown Copy Helper",
+  "description": "Copies VS Code Markdown for Feishu and selected Codex math as Markdown.",
+  "version": "1.0.3",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.96.2"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:markdownCopyHelper.enableCodexMathCopy",
+    "onCommand:markdownCopyHelper.restoreCodexMathCopy"
+  ],
+  "main": "./extension.js",
+  "files": [
+    "extension.js",
+    "bundle-locator.js",
+    "patcher.js",
+    "media/copy-feishu.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "markdownCopyHelper.enableCodexMathCopy",
+        "title": "Markdown Copy Helper: Enable Codex Math Copy"
+      },
+      {
+        "command": "markdownCopyHelper.restoreCodexMathCopy",
+        "title": "Markdown Copy Helper: Restore Codex Math Copy"
+      }
+    ],
+    "markdown.previewScripts": [
+      "./media/copy-feishu.js"
+    ]
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
