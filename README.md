@@ -10,8 +10,8 @@ This extension has two independent copy paths:
    - Forces copied text to black for Feishu.
 
 2. **Codex chat -> Markdown**
-   - Patches the installed Codex Webview bundle so selected formulas and raw
-     `\(...\)` / `\[...\]` source are copied as `$...$` / `$$...$$`.
+   - Patches the installed Codex Webview bundle so selected formulas are
+     copied as `$...$` / `$$...$$` in both HTML and plain-text clipboard data.
    - Codex does not expose an API for another extension to intercept this
      Webview's copy event, so this path uses a version-checked local patch.
 
@@ -20,23 +20,20 @@ This extension has two independent copy paths:
 Package and install the extension:
 
 ```sh
-npx @vscode/vsce package
-code --install-extension markdown-copy-helper-1.0.3.vsix
+code --install-extension markdown-copy-helper-1.2.0.vsix
 ```
 
 The Feishu behavior works in VS Code's built-in Markdown Preview after
 reloading the VS Code window.
 
-For Codex chat, run `Markdown Copy Helper: Enable Codex Math Copy` from the
-Command Palette and reload the VS Code window. Run `Markdown Copy Helper:
-Restore Codex Math Copy` to restore Codex's original bundle.
+For Codex chat, the extension enables the patch automatically at startup and
+offers to reload VS Code after the first change. `Markdown Copy Helper: Enable
+Codex Math Copy` can reapply the patch after a Codex update. `Markdown Copy
+Helper: Restore Codex Math Copy` restores Codex's original bundle.
 
 ## Limitations
 
-- A Codex update replaces its bundled assets. Run the enable command again.
-- The patch supports the Codex bundle shape available when this extension was
-  written; it fails without changing files when that implementation changes.
-- Codex's final clipboard normalization also rewrites `\(...\)` and `\[...\]`
-  inside selected code samples.
-- The Codex path normalizes both `text/html` and `text/plain`, because rich
-  editors such as Feishu prefer HTML clipboard data.
+- The Codex path is verified against Codex `26.5908.31748`. A Codex update can
+  replace its bundled assets; run the enable command again after updating.
+- If Codex changes its copy implementation, the command fails without changing
+  its files.

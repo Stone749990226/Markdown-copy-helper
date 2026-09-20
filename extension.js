@@ -16,7 +16,7 @@ function findMarkdownBundle(codexExtension) {
   );
   const candidates = fs
     .readdirSync(assetDirectory)
-    .filter((name) => /^markdown-.*\.js$/.test(name));
+    .filter((name) => /^app-initial-.*\.js$/.test(name));
   const bundleName = selectPatchableMarkdownBundle(
     candidates.map((name) => ({
       name,
@@ -45,7 +45,7 @@ function requireCodexExtension() {
   return codexExtension;
 }
 
-async function enableMarkdownMathCopy(context) {
+async function enableMarkdownMathCopy(context, { automatic = false } = {}) {
   const codexExtension = requireCodexExtension();
   const bundlePath = findMarkdownBundle(codexExtension);
   const originalSource = fs.readFileSync(bundlePath, "utf8");
@@ -60,11 +60,19 @@ async function enableMarkdownMathCopy(context) {
     fs.writeFileSync(bundlePath, result.source, "utf8");
   }
 
-  await vscode.window.showInformationMessage(
-    result.changed
-      ? "Codex math copy now uses $...$ and $$...$$. Reload VS Code to apply it."
-      : "Codex math copy is already patched. Reload VS Code if it is still open."
-  );
+  if (!automatic || result.changed) {
+    const action = await vscode.window.showInformationMessage(
+      result.changed
+        ? "Codex math copy now uses $...$ and $$...$$. Reload VS Code to apply it."
+        : "Codex math copy is already patched. Reload VS Code if it is still open.",
+      "Reload VS Code"
+    );
+    if (action === "Reload VS Code") {
+      await vscode.commands.executeCommand("workbench.action.reloadWindow");
+    }
+  }
+
+  return result;
 }
 
 async function restoreDefaultMathCopy(context) {
@@ -84,7 +92,7 @@ async function restoreDefaultMathCopy(context) {
   );
 }
 
-function activate(context) {
+async function activate(context) {
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "markdownCopyHelper.enableCodexMathCopy",
@@ -111,6 +119,12 @@ function activate(context) {
       }
     )
   );
+
+  try {
+    await enableMarkdownMathCopy(context, { automatic: true });
+  } catch (error) {
+    console.error("Unable to patch Codex math copy automatically:", error);
+  }
 }
 
 function deactivate() {}

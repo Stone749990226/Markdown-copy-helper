@@ -1,137 +1,50 @@
 "use strict";
 
-const INLINE_SOURCE = "e.textContent=`${pr[0]}${e.textContent??``}${pr[1]}`";
-const DISPLAY_SOURCE = "t.textContent=`${mr[0]}${Gr(e)}${mr[1]}`";
-const INLINE_REPLACEMENT = "e.textContent=`$${e.textContent??``}$`";
-const DISPLAY_REPLACEMENT = "t.textContent=`$$${Gr(e)}$$`";
-const HTML_CLIPBOARD_SOURCE = "t.setData(`text/html`,r.htmlText)";
-const PLAIN_TEXT_CLIPBOARD_SOURCE = "t.setData(`text/plain`,r.plainText)";
-const CLIPBOARD_SOURCE = `${HTML_CLIPBOARD_SOURCE},${PLAIN_TEXT_CLIPBOARD_SOURCE}`;
-const LEGACY_PLAIN_TEXT_REPLACEMENT = String.raw`t.setData("text/plain",r.plainText.replace(/\\\[([\s\S]*?)\\\]/g,(e,t)=>"$$"+t+"$$").replace(/\\\(([\s\S]*?)\\\)/g,(e,t)=>"$"+t+"$"))`;
-const LEGACY_CLIPBOARD_REPLACEMENT = `${HTML_CLIPBOARD_SOURCE},${LEGACY_PLAIN_TEXT_REPLACEMENT}`;
-const PREVIOUS_PLAIN_TEXT_REPLACEMENT = String.raw`t.setData("text/plain",(()=>{let e=t=>{t=t.trim();return t.length>=4&&t.startsWith("$$")&&t.endsWith("$$")?t.slice(2,-2).trim():t.length>=4&&t.startsWith("\\[")&&t.endsWith("\\]")?t.slice(2,-2).trim():t.length>=4&&t.startsWith("\\(")&&t.endsWith("\\)")?t.slice(2,-2).trim():t.length>=2&&t.startsWith("$")&&t.endsWith("$")?t.slice(1,-1).trim():t};return r.plainText.replace(/\\\[([\s\S]*?)\\\]/g,(t,r)=>"$$"+e(r)+"$$").replace(/\\\(([\s\S]*?)\\\)/g,(t,r)=>"$"+e(r)+"$")})())`;
-const PREVIOUS_CLIPBOARD_REPLACEMENT = `${HTML_CLIPBOARD_SOURCE},${PREVIOUS_PLAIN_TEXT_REPLACEMENT}`;
-const CLIPBOARD_REPLACEMENT = String.raw`(()=>{let e=t=>{t=t.trim();return t.length>=4&&t.startsWith("$$")&&t.endsWith("$$")?t.slice(2,-2).trim():t.length>=4&&t.startsWith("\\[")&&t.endsWith("\\]")?t.slice(2,-2).trim():t.length>=4&&t.startsWith("\\(")&&t.endsWith("\\)")?t.slice(2,-2).trim():t.length>=2&&t.startsWith("$")&&t.endsWith("$")?t.slice(1,-1).trim():t},n=t=>t.replace(/\\\[([\s\S]*?)\\\]/g,(t,r)=>"$$"+e(r)+"$$").replace(/\\\(([\s\S]*?)\\\)/g,(t,r)=>"$"+e(r)+"$");t.setData("text/html",n(r.htmlText)),t.setData("text/plain",n(r.plainText))})()`;
+// Codex 26.5908.31748 copies a selection through vZt, immediately before it
+// writes both rich HTML and plain text to the clipboard.
+const COPY_HANDLER_ANCHOR =
+  "function yZt(e,t){let n=t.cloneRange();if(!kZt(n,e))return null;";
+const COPY_FUNCTION_SOURCE =
+  "function vZt(e,t,n=e.ownerDocument.getSelection()){if(t==null)return!1;let r=gZt(e,n);return r==null?!1:(t.setData(`text/html`,r.htmlText),t.setData(`text/plain`,r.plainText),!0)}";
+const COPY_FUNCTION_REPLACEMENT = String.raw`function vZt(e,t,n=e.ownerDocument.getSelection()){if(t==null)return!1;let r=gZt(e,n);if(r==null)return!1;let i=e=>e.replace(/\\\[([\s\S]*?)\\\]/g,(e,t)=>"$$"+t.trim()+"$$").replace(/\\\(([\s\S]*?)\\\)/g,(e,t)=>"$"+t.trim()+"$");return t.setData("text/html",i(r.htmlText)),t.setData("text/plain",i(r.plainText)),!0}`;
 
-function unwrapMathDelimiters(value) {
-  const math = value.trim();
-
-  if (
-    (math.startsWith("$$") && math.endsWith("$$")) ||
-    (math.startsWith("\\[") && math.endsWith("\\]")) ||
-    (math.startsWith("\\(") && math.endsWith("\\)"))
-  ) {
-    return math.slice(2, -2).trim();
-  }
-  if (math.startsWith("$") && math.endsWith("$")) {
-    return math.slice(1, -1).trim();
-  }
-  return math;
-}
-
-function normalizeMathDelimiters(text) {
-  return text
-    .replace(
-      /\\\[([\s\S]*?)\\\]/g,
-      (_, math) => "$$" + unwrapMathDelimiters(math) + "$$"
-    )
-    .replace(
-      /\\\(([\s\S]*?)\\\)/g,
-      (_, math) => "$" + unwrapMathDelimiters(math) + "$"
-    );
+function normalizeMathDelimiters(value) {
+  return value
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => "$$" + math.trim() + "$$")
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, math) => "$" + math.trim() + "$");
 }
 
 function supportsMarkdownCopyPatch(source) {
-  const hasOriginalMathNodeSource =
-    source.includes(INLINE_SOURCE) && source.includes(DISPLAY_SOURCE);
-  const hasLegacyMathNodePatch =
-    source.includes(INLINE_REPLACEMENT) &&
-    source.includes(DISPLAY_REPLACEMENT);
-  const hasCurrentClipboardPatch = source.includes(CLIPBOARD_REPLACEMENT);
-  const hasLegacyClipboardPatch = source.includes(
-    LEGACY_CLIPBOARD_REPLACEMENT
-  );
-  const hasPreviousClipboardPatch = source.includes(
-    PREVIOUS_CLIPBOARD_REPLACEMENT
-  );
-  const hasOriginalClipboardSource = source.includes(CLIPBOARD_SOURCE);
-
   return (
-    (hasOriginalMathNodeSource || hasLegacyMathNodePatch) &&
-    (hasCurrentClipboardPatch ||
-      hasLegacyClipboardPatch ||
-      hasPreviousClipboardPatch ||
-      hasOriginalClipboardSource)
+    source.includes(COPY_HANDLER_ANCHOR) &&
+    (source.includes(COPY_FUNCTION_SOURCE) ||
+      source.includes(COPY_FUNCTION_REPLACEMENT))
   );
 }
 
 function patchMarkdownCopy(source) {
   if (!supportsMarkdownCopyPatch(source)) {
     throw new Error(
-      "The installed Codex Markdown bundle does not match the supported copy implementation."
+      "The installed Codex copy implementation does not match the supported version."
     );
   }
 
-  const hasOriginalMathNodeSource =
-    source.includes(INLINE_SOURCE) && source.includes(DISPLAY_SOURCE);
-  const hasLegacyMathNodePatch =
-    source.includes(INLINE_REPLACEMENT) &&
-    source.includes(DISPLAY_REPLACEMENT);
-  const hasCurrentClipboardPatch = source.includes(CLIPBOARD_REPLACEMENT);
-  const hasLegacyClipboardPatch = source.includes(
-    LEGACY_CLIPBOARD_REPLACEMENT
-  );
-  const hasPreviousClipboardPatch = source.includes(
-    PREVIOUS_CLIPBOARD_REPLACEMENT
-  );
-  const hasOriginalClipboardSource = source.includes(CLIPBOARD_SOURCE);
-
-  if (hasOriginalMathNodeSource && hasCurrentClipboardPatch) {
+  if (source.includes(COPY_FUNCTION_REPLACEMENT)) {
     return { changed: false, source, status: "already-patched" };
-  }
-
-  let patchedSource = source;
-  if (hasLegacyMathNodePatch) {
-    patchedSource = patchedSource
-      .replace(INLINE_REPLACEMENT, () => INLINE_SOURCE)
-      .replace(DISPLAY_REPLACEMENT, () => DISPLAY_SOURCE);
-  }
-  if (hasLegacyClipboardPatch) {
-    patchedSource = patchedSource.replace(
-      LEGACY_CLIPBOARD_REPLACEMENT,
-      () => CLIPBOARD_REPLACEMENT
-    );
-  } else if (hasPreviousClipboardPatch) {
-    patchedSource = patchedSource.replace(
-      PREVIOUS_CLIPBOARD_REPLACEMENT,
-      () => CLIPBOARD_REPLACEMENT
-    );
-  } else if (hasOriginalClipboardSource) {
-    patchedSource = patchedSource.replace(
-      CLIPBOARD_SOURCE,
-      () => CLIPBOARD_REPLACEMENT
-    );
   }
 
   return {
     changed: true,
-    source: patchedSource,
+    source: source.replace(COPY_FUNCTION_SOURCE, () => COPY_FUNCTION_REPLACEMENT),
     status: "patched",
   };
 }
 
 module.exports = {
-  CLIPBOARD_REPLACEMENT,
-  CLIPBOARD_SOURCE,
-  DISPLAY_REPLACEMENT,
-  DISPLAY_SOURCE,
-  HTML_CLIPBOARD_SOURCE,
-  INLINE_REPLACEMENT,
-  INLINE_SOURCE,
-  LEGACY_CLIPBOARD_REPLACEMENT,
+  COPY_FUNCTION_REPLACEMENT,
+  COPY_FUNCTION_SOURCE,
+  COPY_HANDLER_ANCHOR,
   normalizeMathDelimiters,
   patchMarkdownCopy,
-  PREVIOUS_CLIPBOARD_REPLACEMENT,
   supportsMarkdownCopyPatch,
-  unwrapMathDelimiters,
 };

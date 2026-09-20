@@ -2,7 +2,7 @@
   "name": "markdown-copy-helper",
   "displayName": "Markdown Copy Helper",
   "description": "Copies VS Code Markdown for Feishu and selected Codex math as Markdown.",
-  "version": "1.0.3",
+  "version": "1.2.0",
   "publisher": "local",
   "license": "MIT",
   "engines": {
@@ -12,6 +12,7 @@
     "Other"
   ],
   "activationEvents": [
+    "onStartupFinished",
     "onCommand:markdownCopyHelper.enableCodexMathCopy",
     "onCommand:markdownCopyHelper.restoreCodexMathCopy"
   ],
