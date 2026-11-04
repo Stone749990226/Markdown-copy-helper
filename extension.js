@@ -4,27 +4,18 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vscode = require("vscode");
 const { patchMarkdownCopy } = require("./patcher");
-const { selectPatchableMarkdownBundle } = require("./bundle-locator");
+const { findMarkdownBundle: locateMarkdownBundle } = require("./bundle-locator");
+const { normalizeMarkdownMath } = require("./markdown-math");
 
 const CODEX_EXTENSION_ID = "openai.chatgpt";
 
-function findMarkdownBundle(codexExtension) {
+async function findMarkdownBundle(codexExtension) {
   const assetDirectory = path.join(
     codexExtension.extensionPath,
     "webview",
     "assets"
   );
-  const candidates = fs
-    .readdirSync(assetDirectory)
-    .filter((name) => /^app-initial-.*\.js$/.test(name));
-  const bundleName = selectPatchableMarkdownBundle(
-    candidates.map((name) => ({
-      name,
-      source: fs.readFileSync(path.join(assetDirectory, name), "utf8"),
-    }))
-  );
-
-  return path.join(assetDirectory, bundleName);
+  return locateMarkdownBundle(assetDirectory);
 }
 
 function backupPath(context, codexExtension, bundlePath) {
@@ -47,7 +38,7 @@ function requireCodexExtension() {
 
 async function enableMarkdownMathCopy(context, { automatic = false } = {}) {
   const codexExtension = requireCodexExtension();
-  const bundlePath = findMarkdownBundle(codexExtension);
+  const bundlePath = await findMarkdownBundle(codexExtension);
   const originalSource = fs.readFileSync(bundlePath, "utf8");
   const result = patchMarkdownCopy(originalSource);
 
@@ -58,6 +49,11 @@ async function enableMarkdownMathCopy(context, { automatic = false } = {}) {
       fs.copyFileSync(bundlePath, originalBackupPath);
     }
     fs.writeFileSync(bundlePath, result.source, "utf8");
+  }
+
+  if (!automatic) {
+    await vscode.workspace.getConfiguration("markdownCopyHelper")
+      .update("codexPatchEnabled", true, vscode.ConfigurationTarget.Global);
   }
 
   if (!automatic || result.changed) {
@@ -77,7 +73,7 @@ async function enableMarkdownMathCopy(context, { automatic = false } = {}) {
 
 async function restoreDefaultMathCopy(context) {
   const codexExtension = requireCodexExtension();
-  const bundlePath = findMarkdownBundle(codexExtension);
+  const bundlePath = await findMarkdownBundle(codexExtension);
   const originalBackupPath = backupPath(context, codexExtension, bundlePath);
 
   if (!fs.existsSync(originalBackupPath)) {
@@ -87,13 +83,41 @@ async function restoreDefaultMathCopy(context) {
   }
 
   fs.copyFileSync(originalBackupPath, bundlePath);
+  await vscode.workspace.getConfiguration("markdownCopyHelper")
+    .update("codexPatchEnabled", false, vscode.ConfigurationTarget.Global);
   await vscode.window.showInformationMessage(
     "Restored Codex's default math copy behavior. Reload VS Code to apply it."
   );
 }
 
+async function normalizeClipboardMath() {
+  const original = await vscode.env.clipboard.readText();
+  const normalized = normalizeMarkdownMath(original);
+  if (normalized === original) {
+    vscode.window.setStatusBarMessage("剪贴板中没有需要转换的 LaTeX 公式。", 4000);
+    return;
+  }
+  // A remote clipboard read can take time. Do not overwrite a newer copy.
+  if (await vscode.env.clipboard.readText() !== original) {
+    await vscode.window.showWarningMessage("剪贴板已变化，请重新运行公式转换。");
+    return;
+  }
+  await vscode.env.clipboard.writeText(normalized);
+  vscode.window.setStatusBarMessage("已将剪贴板公式转换为 Markdown，可直接粘贴。", 4000);
+}
+
 async function activate(context) {
   context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "markdownCopyHelper.normalizeClipboardMath",
+      async () => {
+        try {
+          await normalizeClipboardMath();
+        } catch (error) {
+          await vscode.window.showErrorMessage(`公式转换失败：${error.message}`);
+        }
+      }
+    ),
     vscode.commands.registerCommand(
       "markdownCopyHelper.enableCodexMathCopy",
       async () => {
@@ -120,10 +144,16 @@ async function activate(context) {
     )
   );
 
-  try {
-    await enableMarkdownMathCopy(context, { automatic: true });
-  } catch (error) {
-    console.error("Unable to patch Codex math copy automatically:", error);
+  if (vscode.workspace.getConfiguration("markdownCopyHelper").get("codexPatchEnabled", true) &&
+      vscode.extensions.getExtension(CODEX_EXTENSION_ID)) {
+    try {
+      await enableMarkdownMathCopy(context, { automatic: true });
+    } catch (error) {
+      console.error("Unable to patch Codex math copy automatically:", error);
+      await vscode.window.showWarningMessage(
+        `Codex 富文本公式复制未能启用：${error.message}。可运行 Markdown Copy Helper: Enable Codex Math Copy 重试。`
+      );
+    }
   }
 }
 

@@ -1,8 +1,8 @@
 {
   "name": "markdown-copy-helper",
   "displayName": "Markdown Copy Helper",
-  "description": "Copies VS Code Markdown for Feishu and selected Codex math as Markdown.",
-  "version": "1.2.0",
+  "description": "Preserves rich text and Markdown math when copying Codex selections directly to Feishu.",
+  "version": "1.4.1",
   "publisher": "local",
   "license": "MIT",
   "engines": {
@@ -14,19 +14,25 @@
   "activationEvents": [
     "onStartupFinished",
     "onCommand:markdownCopyHelper.enableCodexMathCopy",
-    "onCommand:markdownCopyHelper.restoreCodexMathCopy"
+    "onCommand:markdownCopyHelper.restoreCodexMathCopy",
+    "onCommand:markdownCopyHelper.normalizeClipboardMath"
   ],
   "main": "./extension.js",
   "files": [
     "extension.js",
     "bundle-locator.js",
     "patcher.js",
+    "markdown-math.js",
     "media/copy-feishu.js",
     "README.md",
     "LICENSE"
   ],
   "contributes": {
     "commands": [
+      {
+        "command": "markdownCopyHelper.normalizeClipboardMath",
+        "title": "Markdown Copy Helper: 将剪贴板公式转为 Markdown"
+      },
       {
         "command": "markdownCopyHelper.enableCodexMathCopy",
         "title": "Markdown Copy Helper: Enable Codex Math Copy"
@@ -36,6 +42,23 @@
         "title": "Markdown Copy Helper: Restore Codex Math Copy"
       }
     ],
+    "keybindings": [
+      {
+        "command": "markdownCopyHelper.normalizeClipboardMath",
+        "key": "ctrl+alt+m",
+        "mac": "cmd+alt+m"
+      }
+    ],
+    "configuration": {
+      "title": "Markdown Copy Helper",
+      "properties": {
+        "markdownCopyHelper.codexPatchEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "启动时自动修补 Codex 的直接复制行为（需要重载窗口；依赖 Codex 内部实现）。通用剪贴板转换无需此选项。"
+        }
+      }
+    },
     "markdown.previewScripts": [
       "./media/copy-feishu.js"
     ]
